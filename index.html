@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Client Portal Lite</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    max-width: 750px;
+    margin: 0 auto;
+    padding: 20px 15px 60px;
+    background: linear-gradient(180deg, #eef2f9 0%, #f7f9fc 100%);
+    color: #1e293b;
+  }
+  h1 {
+    color: #1e3a8a;
+    font-size: 26px;
+    margin-bottom: 20px;
+  }
+  h2 {
+    font-size: 18px;
+    color: #1e3a8a;
+    margin-top: 0;
+    border-bottom: 2px solid #e0e7ff;
+    padding-bottom: 8px;
+  }
+  .card {
+    background: white;
+    padding: 22px;
+    border-radius: 14px;
+    margin-bottom: 22px;
+    box-shadow: 0 4px 14px rgba(30,58,138,0.08);
+  }
+  input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    margin: 7px 0;
+    border: 1.5px solid #dbe2ef;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #2c7be5;
+  }
+  button {
+    background: linear-gradient(135deg, #2c7be5, #1e5fc4);
+    color: white;
+    border: none;
+    padding: 11px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 8px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  button:hover { opacity: 0.9; }
+  .project {
+    border-left: 5px solid #2c7be5;
+    padding: 16px;
+    margin: 14px 0;
+    background: #f8fafc;
+    border-radius: 0 10px 10px 0;
+  }
+  .project b { font-size: 16px; color: #1e293b; }
+  .hidden { display: none; }
+  #userInfo {
+    text-align: right;
+    font-size: 13px;
+    background: white;
+    padding: 10px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  #userInfo button { padding: 5px 12px; margin-top: 0; font-size: 12px; }
+  .status {
+    font-weight: 600;
+    color: #1e5fc4;
+    background: #e0edff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    font-size: 13px;
+  }
+  .comment {
+    font-size: 13px;
+    color: #475569;
+    margin: 6px 0;
+    padding: 6px 10px;
+    background: white;
+    border-radius: 6px;
+  }
+  a { color: #2c7be5; font-weight: 600; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<h1>📁 Client Portal Lite</h1>
+
+<div id="authSection" class="card">
+  <h2 id="authTitle">Login</h2>
+  <input type="email" id="email" placeholder="Email" />
+  <input type="password" id="password" placeholder="Password" />
+  <select id="role">
+    <option value="client">I am a Client</option>
+    <option value="company">I am a Company/Freelancer</option>
+  </select>
+  <button onclick="signup()">Sign Up</button>
+  <button onclick="login()">Login</button>
+  <p id="authMsg" style="color:red;"></p>
+</div>
+
+<div id="appSection" class="hidden">
+  <div id="userInfo">
+    <span id="userEmail"></span> | <button onclick="logout()">Logout</button>
+  </div>
+
+  <div id="companyView" class="card hidden">
+    <h2>Create New Project</h2>
+    <input type="text" id="projName" placeholder="Project Name" />
+    <input type="email" id="clientEmail" placeholder="Client's Email" />
+    <textarea id="projDesc" placeholder="Project Description"></textarea>
+    <p>📎 <input type="file" id="projFile" accept=".pdf,.jpg,.png,.docx" /></p>
+    <button onclick="createProject()">Create Project</button>
+  </div>
+
+  <div class="card">
+    <h2>Projects</h2>
+    <div id="projectList"></div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import {
+    getFirestore, collection, addDoc, query, where,
+    doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAVLqngZtUVbu04siA-P7O92pxwFKR1i8I",
+    authDomain: "client-portal-lite-abe84.firebaseapp.com",
+    projectId: "client-portal-lite-abe84",
+    storageBucket: "client-portal-lite-abe84.firebasestorage.app",
+    messagingSenderId: "327626577462",
+    appId: "1:327626577462:web:dcd6ddc7cf1153068f2a97"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  let currentUser = null;
+  let currentRole = null;
+
+  window.signup = async function() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const role = document.getElementById('role').value;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, "users", cred.user.uid), { email, role });
+    } catch (e) {
+      document.getElementById('authMsg').innerText = e.message;
+    }
+  }
+
+  window.login = async function() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (e) {
+      document.getElementById('authMsg').innerText = e.message;
+    }
+  }
+
+  window.logout = function() { signOut(auth); }
+
+  function toBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+    });
+  }
+
+  window.createProject = async function() {
+    const name = document.getElementById('projName').value;
+    const clientEmail = document.getElementById('clientEmail').value;
+    const desc = document.getElementById('projDesc').value;
+    const fileInput = document.getElementById('projFile');
+    if (!name || !clientEmail) { alert("Project name & client email required"); return; }
+
+    let fileData = null, fileName = null;
+    if (fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      if (file.size > 700000) { alert("File too large! Use under 700KB."); return; }
+      fileData = await toBase64(file);
+      fileName = file.name;
+    }
+
+    await addDoc(collection(db, "projects"), {
+      name, desc, clientEmail,
+      companyEmail: currentUser.email,
+      status: "In Progress",
+      progress: 0,
+      comments: [],
+      fileData, fileName,
+      createdAt: new Date().toISOString()
+    });
+    document.getElementById('projName').value = "";
+    document.getElementById('clientEmail').value = "";
+    document.getElementById('projDesc').value = "";
+    fileInput.value = "";
+  }
+
+  window.addComment = async function(projectId) {
+    const input = document.getElementById('c_' + projectId);
+    const text = input.value;
+    if (!text) return;
+    await updateDoc(doc(db, "projects", projectId), {
+      comments: arrayUnion({ by: currentUser.email, text, at: new Date().toISOString() })
+    });
+    input.value = "";
+  }
+
+  window.updateStatus = async function(projectId, newStatus) {
+    await updateDoc(doc(db, "projects", projectId), { status: newStatus });
+  }
+
+  window.updateProgress = async function(projectId, val) {
+    await updateDoc(doc(db, "projects", projectId), { progress: Number(val) });
+  }
+
+  function renderProjects(snapshot) {
+    const list = document.getElementById('projectList');
+    list.innerHTML = "";
+    snapshot.forEach(docSnap => {
+      const p = docSnap.data();
+      const id = docSnap.id;
+
+      let fileHtml = p.fileData
+        ? `<a href="${p.fileData}" download="${p.fileName}">📎 ${p.fileName}</a><br>`
+        : "";
+
+      let commentsHtml = (p.comments || []).map(c =>
+        `<div class="comment">💬 <b>${c.by}</b>: ${c.text}</div>`
+      ).join("");
+
+      let statusControls = "";
+      if (currentRole === "company") {
+        statusControls = `
+          <select onchange="updateStatus('${id}', this.value)">
+            <option ${p.status==="In Progress"?"selected":""}>In Progress</option>
+            <option ${p.status==="Review"?"selected":""}>Review</option>
+            <option ${p.status==="Completed"?"selected":""}>Completed</option>
+          </select>
+          Progress: <input type="number" min="0" max="100" value="${p.progress||0}"
+            onchange="updateProgress('${id}', this.value)" style="width:60px;display:inline-block;"> %
+        `;
+      } else {
+        statusControls = `<span class="status">Status: ${p.status} | Progress: ${p.progress||0}%</span>`;
+      }
+
+      list.innerHTML += `
+        <div class="project">
+          <b>${p.name}</b><br>
+          <small>${p.desc || ""}</small><br>
+          <small>Client: ${p.clientEmail} | Company: ${p.companyEmail}</small><br>
+          ${statusControls}
+          ${fileHtml}
+          <div>${commentsHtml}</div>
+          <input type="text" id="c_${id}" placeholder="Add comment...">
+          <button onclick="addComment('${id}')">Post</button>
+        </div>
+      `;
+    });
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUser = user;
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      currentRole = userDoc.exists() ? userDoc.data().role : "client";
+
+      document.getElementById('authSection').classList.add('hidden');
+      document.getElementById('appSection').classList.remove('hidden');
+      document.getElementById('userEmail').innerText = user.email + " (" + currentRole + ")";
+
+      if (currentRole === "company") {
+        document.getElementById('companyView').classList.remove('hidden');
+        const q = query(collection(db, "projects"), where("companyEmail", "==", user.email));
+        onSnapshot(q, renderProjects);
+      } else {
+        const q = query(collection(db, "projects"), where("clientEmail", "==", user.email));
+        onSnapshot(q, renderProjects);
+      }
+    } else {
+      document.getElementById('authSection').classList.remove('hidden');
+      document.getElementById('appSection').classList.add('hidden');
+      document.getElementById('companyView').classList.add('hidden');
+    }
+  });
+</script>
+
+</body>
+</html>
